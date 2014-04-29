@@ -31,6 +31,7 @@
 #include <asm/procinfo.h>
 
 #include <asm/gic.h>
+#include <asm/vgic.h>
 #include <asm/platform.h>
 #include "vtimer.h"
 #include "vuart.h"
@@ -481,6 +482,7 @@ int vcpu_initialise(struct vcpu *v)
 void vcpu_destroy(struct vcpu *v)
 {
     vcpu_timer_destroy(v);
+    vcpu_vgic_free(v);
     free_xenheap_pages(v->arch.stack, STACK_ORDER);
 }
 
