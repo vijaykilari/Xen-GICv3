@@ -144,8 +144,11 @@
 #include <xen/device_tree.h>
 #include <xen/irq.h>
 
-#define DT_MATCH_GIC    DT_MATCH_COMPATIBLE("arm,cortex-a15-gic"), \
-                        DT_MATCH_COMPATIBLE("arm,cortex-a7-gic")
+#define DT_MATCH_GIC_V2_STRING_1     "arm,cortex-a15-gic"
+#define DT_MATCH_GIC_V2_STRING_2     "arm,cortex-a7-gic"
+
+#define DT_MATCH_GIC_V2 DT_MATCH_COMPATIBLE(DT_MATCH_GIC_V2_STRING_1), \
+                        DT_MATCH_COMPATIBLE(DT_MATCH_GIC_V2_STRING_2)
 
 /*
  * GICv2 register that needs to be saved/restored
