@@ -34,6 +34,10 @@
 #include <asm/gic.h>
 #include <asm/vgic.h>
 
+extern int vgic_to_sgi(struct vcpu *v, register_t sgir,
+                       enum gic_sgi_mode irqmode, int virq,
+                       unsigned long vcpu_mask);
+
 static int __vgic_v3_rdistr_rd_mmio_read(struct vcpu *v, mmio_info_t *info,
                                         uint32_t gicr_reg)
 {
@@ -835,6 +839,57 @@ write_ignore:
 write_ignore_64:
     if ( dabt.size != DABT_DOUBLE_WORD ) goto bad_width;
     return 1;
+}
+
+static int vgicv3_to_sgi(struct vcpu *v, register_t sgir)
+{
+    int virq;
+    int irqmode;
+    enum gic_sgi_mode sgi_mode;
+    unsigned long vcpu_mask = 0;
+
+    irqmode = (sgir >> ICH_SGI_IRQMODE_SHIFT) & ICH_SGI_IRQMODE_MASK;
+    virq = (sgir >> ICH_SGI_IRQ_SHIFT ) & ICH_SGI_IRQ_MASK;
+    vcpu_mask = sgir & ICH_SGI_TARGETLIST_MASK;
+
+    /* Map GIC sgi value to enum value */
+    switch ( irqmode )
+    {
+    case ICH_SGI_TARGET_LIST:
+        sgi_mode = SGI_TARGET_LIST;
+        break;
+    case ICH_SGI_TARGET_OTHERS:
+        sgi_mode = SGI_TARGET_OTHERS;
+        break;
+    default:
+        BUG();
+    }
+
+    return vgic_to_sgi(v, sgir, sgi_mode, virq, vcpu_mask);
+}
+
+int vgic_emulate(struct cpu_user_regs *regs, union hsr hsr)
+{
+    struct vcpu *v = current;
+    struct hsr_sysreg sysreg = hsr.sysreg;
+    register_t *r = select_user_reg(regs, sysreg.reg);
+
+    ASSERT (hsr.ec == HSR_EC_SYSREG);
+
+    switch ( hsr.bits & HSR_SYSREG_REGS_MASK )
+    {
+    case HSR_SYSREG_ICC_SGI1R_EL1:
+        /* WO */
+        if ( !sysreg.read )
+            return vgicv3_to_sgi(v, *r);
+        else
+        {
+            gdprintk(XENLOG_WARNING, "Reading SGI1R_EL1 - WO register\n");
+            return 0;
+        }
+    default:
+        return 0;
+    }
 }
 
 static const struct mmio_handler_ops vgic_rdistr_mmio_handler = {
