@@ -344,6 +344,15 @@ out:
         smp_send_event_check_mask(cpumask_of(v->processor));
 }
 
+int vgic_emulate(struct cpu_user_regs *regs, union hsr hsr)
+{
+    struct vcpu *v = current;
+ 
+    ASSERT(v->domain->arch.vgic.handler->emulate_sysreg != NULL);
+
+    return v->domain->arch.vgic.handler->emulate_sysreg(regs, hsr);
+}
+
 /*
  * Local variables:
  * mode: C
