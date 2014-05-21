@@ -656,6 +656,7 @@ static void gic_update_one_lr(struct vcpu *v, int i)
     p = irq_to_pending(v, irq);
     if ( lr & GICH_LR_ACTIVE )
     {
+        set_bit(GIC_IRQ_GUEST_ACTIVE, &p->status);
         if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) &&
              test_and_clear_bit(GIC_IRQ_GUEST_QUEUED, &p->status) )
         {
@@ -679,6 +680,7 @@ static void gic_update_one_lr(struct vcpu *v, int i)
         if ( p->desc != NULL )
             p->desc->status &= ~IRQ_INPROGRESS;
         clear_bit(GIC_IRQ_GUEST_VISIBLE, &p->status);
+        clear_bit(GIC_IRQ_GUEST_ACTIVE, &p->status);
         p->lr = GIC_INVALID_LR;
         if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) &&
              test_bit(GIC_IRQ_GUEST_QUEUED, &p->status) )
@@ -709,20 +711,55 @@ void gic_clear_lrs(struct vcpu *v)
 
 static void gic_restore_pending_irqs(struct vcpu *v)
 {
-    int i;
-    struct pending_irq *p, *t;
+    int lr = 0, lrs = nr_lrs;
+    struct pending_irq *p, *t, *p_r;
+    struct list_head *inflight_r;
     unsigned long flags;
 
     spin_lock_irqsave(&v->arch.vgic.lock, flags);
+
+    if ( list_empty(&v->arch.vgic.lr_pending) )
+        goto out;
+
+    inflight_r = &v->arch.vgic.inflight_irqs;
     list_for_each_entry_safe ( p, t, &v->arch.vgic.lr_pending, lr_queue )
     {
-        i = find_first_zero_bit(&this_cpu(lr_mask), nr_lrs);
-        if ( i >= nr_lrs ) return;
+        lr = find_next_zero_bit(&this_cpu(lr_mask), nr_lrs, lr);
+        if ( lr >= nr_lrs )
+        {
+            /* No more free LRs: find a lower priority irq to evict */
+            list_for_each_entry_reverse( p_r, inflight_r, inflight )
+            {
+                if ( p_r->priority == p->priority )
+                    goto out;
+                if ( test_bit(GIC_IRQ_GUEST_VISIBLE, &p_r->status) &&
+                     !test_bit(GIC_IRQ_GUEST_ACTIVE, &p_r->status) )
+                    goto found;
+            }
+            /* We didn't find a victim this time, and we won't next
+             * time, so quit */
+            goto out;
 
-        gic_set_lr(i, p, GICH_LR_PENDING);
+found:
+            lr = p_r->lr;
+            p_r->lr = GIC_INVALID_LR;
+            set_bit(GIC_IRQ_GUEST_QUEUED, &p_r->status);
+            clear_bit(GIC_IRQ_GUEST_VISIBLE, &p_r->status);
+            gic_add_to_lr_pending(v, p_r);
+            inflight_r = &p_r->inflight; 
+        }
+
+        gic_set_lr(lr, p, GICH_LR_PENDING);
         list_del_init(&p->lr_queue);
-        set_bit(i, &this_cpu(lr_mask));
+        set_bit(lr, &this_cpu(lr_mask));
+
+        /* We can only evict nr_lrs entries */
+        lrs--;
+        if ( lrs == 0 )
+            break;
     }
+
+out:
     spin_unlock_irqrestore(&v->arch.vgic.lock, flags);
 }
 
@@ -739,8 +776,44 @@ void gic_clear_pending_irqs(struct vcpu *v)
 
 int gic_events_need_delivery(void)
 {
-    return (!list_empty(&current->arch.vgic.lr_pending) ||
-            this_cpu(lr_mask));
+    int mask_priority, lrs = nr_lrs;
+    int max_priority = 0xff, active_priority = 0xff;
+    struct vcpu *v = current;
+    struct pending_irq *p;
+    unsigned long flags;
+
+    mask_priority = (GICH[GICH_VMCR] >> GICH_VMCR_PRIORITY_SHIFT) & GICH_VMCR_PRIORITY_MASK;
+    mask_priority = mask_priority << 3;
+
+    spin_lock_irqsave(&v->arch.vgic.lock, flags);
+
+    /* TODO: We order the guest irqs by priority, but we don't change
+     * the priority of host irqs. */
+    list_for_each_entry( p, &v->arch.vgic.inflight_irqs, inflight )
+    {
+        if ( test_bit(GIC_IRQ_GUEST_ACTIVE, &p->status) )
+        {
+            if ( p->priority < active_priority )
+                active_priority = p->priority;
+            break;
+        } else if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) ) {
+            if ( p->priority < max_priority )
+                max_priority = p->priority;
+        }
+        if ( p->priority >= mask_priority )
+            break;
+        lrs--;
+        if ( lrs == 0 )
+            break;
+    }
+
+    spin_unlock_irqrestore(&v->arch.vgic.lock, flags);
+
+    if ( max_priority < active_priority &&
+         max_priority < mask_priority )
+        return 1;
+    else
+        return 0;
 }
 
 void gic_inject(void)
