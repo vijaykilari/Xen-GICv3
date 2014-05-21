@@ -595,9 +595,16 @@ static inline void gic_add_to_lr_pending(struct vcpu *v, struct pending_irq *n)
 
 void gic_remove_from_queues(struct vcpu *v, unsigned int virtual_irq)
 {
-    struct pending_irq *p = irq_to_pending(v, virtual_irq);
+    struct pending_irq *p;
     unsigned long flags;
 
+    /* TODO: do not assume SPI delivery on vcpu0 */
+    if ( virtual_irq >= 32 && v->vcpu_id != 0 )
+        v = v->domain->vcpu[0];
+
+    p = irq_to_pending(v, virtual_irq);
+
+    /* TODO: evict the irq from LRs */
     spin_lock_irqsave(&v->arch.vgic.lock, flags);
     if ( !list_empty(&p->lr_queue) )
         list_del_init(&p->lr_queue);
