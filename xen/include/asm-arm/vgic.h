@@ -54,7 +54,7 @@ static inline int REG_RANK_NR(int b, uint32_t n)
     }
 }
 
-static inline uint32_t byte_read(uint32_t val, int sign, int offset)
+static inline uint32_t vgic_byte_read(uint32_t val, int sign, int offset)
 {
     int byte = offset & 0x3;
 
@@ -66,7 +66,7 @@ static inline uint32_t byte_read(uint32_t val, int sign, int offset)
     return val;
 }
 
-static inline void byte_write(uint32_t *reg, uint32_t var, int offset)
+static inline void vgic_byte_write(uint32_t *reg, uint32_t var, int offset)
 {
     int byte = offset & 0x3;
 

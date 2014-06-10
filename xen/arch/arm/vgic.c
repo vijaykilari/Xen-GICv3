@@ -209,7 +209,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_ISPENDR);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = byte_read(rank->ipend, dabt.sign, offset);
+        *r = vgic_byte_read(rank->ipend, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -218,7 +218,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_ICPENDR);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = byte_read(rank->ipend, dabt.sign, offset);
+        *r = vgic_byte_read(rank->ipend, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -248,7 +248,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         vgic_lock_rank(v, rank);
         *r = rank->itargets[REG_RANK_INDEX(8, gicd_reg - GICD_ITARGETSR)];
         if ( dabt.size == 0 )
-            *r = byte_read(*r, dabt.sign, offset);
+            *r = vgic_byte_read(*r, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -260,7 +260,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         vgic_lock_rank(v, rank);
         *r = rank->ipriority[REG_RANK_INDEX(8, gicd_reg - GICD_IPRIORITYR)];
         if ( dabt.size == 0 )
-            *r = byte_read(*r, dabt.sign, offset);
+            *r = vgic_byte_read(*r, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -288,7 +288,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_CPENDSGIR);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = byte_read(rank->pendsgi, dabt.sign, offset);
+        *r = vgic_byte_read(rank->pendsgi, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -297,7 +297,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_SPENDSGIR);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = byte_read(rank->pendsgi, dabt.sign, offset);
+        *r = vgic_byte_read(rank->pendsgi, dabt.sign, offset);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -557,7 +557,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
         if ( dabt.size == 2 )
             rank->itargets[REG_RANK_INDEX(8, gicd_reg - GICD_ITARGETSR)] = *r;
         else
-            byte_write(&rank->itargets[REG_RANK_INDEX(8, gicd_reg - GICD_ITARGETSR)],
+            vgic_byte_write(&rank->itargets[REG_RANK_INDEX(8, gicd_reg - GICD_ITARGETSR)],
                        *r, offset);
         vgic_unlock_rank(v, rank);
         return 1;
@@ -570,7 +570,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
         if ( dabt.size == 2 )
             rank->ipriority[REG_RANK_INDEX(8, gicd_reg - GICD_IPRIORITYR)] = *r;
         else
-            byte_write(&rank->ipriority[REG_RANK_INDEX(8, gicd_reg - GICD_IPRIORITYR)],
+            vgic_byte_write(&rank->ipriority[REG_RANK_INDEX(8, gicd_reg - GICD_IPRIORITYR)],
                        *r, offset);
         vgic_unlock_rank(v, rank);
         return 1;
@@ -696,7 +696,7 @@ void vgic_vcpu_inject_irq(struct vcpu *v, unsigned int irq)
         return;
     }
 
-    priority = byte_read(rank->ipriority[REG_RANK_INDEX(8, irq)], 0, irq & 0x3);
+    priority = vgic_byte_read(rank->ipriority[REG_RANK_INDEX(8, irq)], 0, irq & 0x3);
 
     n->irq = irq;
     set_bit(GIC_IRQ_GUEST_QUEUED, &n->status);
