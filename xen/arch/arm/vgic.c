@@ -31,8 +31,6 @@
 #include <asm/gic.h>
 #include <asm/vgic.h>
 
-#define REG(n) (n)
-
 static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info);
 static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info);
 
@@ -151,8 +149,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
     struct cpu_user_regs *regs = guest_cpu_user_regs();
     register_t *r = select_user_reg(regs, dabt.reg);
     struct vgic_irq_rank *rank;
-    int offset = (int)(info->gpa - v->domain->arch.vgic.dbase);
-    int gicd_reg = REG(offset);
+    int gicd_reg = (int)(info->gpa - v->domain->arch.vgic.dbase);
 
     switch ( gicd_reg )
     {
@@ -180,7 +177,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         return 1;
 
     /* Implementation defined -- read as zero */
-    case REG(0x020) ... REG(0x03c):
+    case 0x020 ... 0x03c:
         goto read_as_zero;
 
     case GICD_IGROUPR ... GICD_IGROUPRN:
@@ -210,7 +207,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_ISPENDR, DABT_WORD);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = vgic_byte_read(rank->ipend, dabt.sign, offset);
+        *r = vgic_byte_read(rank->ipend, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -219,7 +216,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_ICPENDR, DABT_WORD);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = vgic_byte_read(rank->ipend, dabt.sign, offset);
+        *r = vgic_byte_read(rank->ipend, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -250,7 +247,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         *r = rank->itargets[REG_RANK_INDEX(8, gicd_reg - GICD_ITARGETSR,
                                            DABT_WORD)];
         if ( dabt.size == DABT_BYTE )
-            *r = vgic_byte_read(*r, dabt.sign, offset);
+            *r = vgic_byte_read(*r, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -263,7 +260,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         *r = rank->ipriority[REG_RANK_INDEX(8, gicd_reg - GICD_IPRIORITYR,
                                             DABT_WORD)];
         if ( dabt.size == DABT_BYTE )
-            *r = vgic_byte_read(*r, dabt.sign, offset);
+            *r = vgic_byte_read(*r, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -291,7 +288,7 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_CPENDSGIR, DABT_WORD);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = vgic_byte_read(rank->pendsgi, dabt.sign, offset);
+        *r = vgic_byte_read(rank->pendsgi, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -300,12 +297,12 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         rank = vgic_irq_rank(v, 1, gicd_reg - GICD_SPENDSGIR, DABT_WORD);
         if ( rank == NULL) goto read_as_zero;
         vgic_lock_rank(v, rank);
-        *r = vgic_byte_read(rank->pendsgi, dabt.sign, offset);
+        *r = vgic_byte_read(rank->pendsgi, dabt.sign, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
     /* Implementation defined -- read as zero */
-    case REG(0xfd0) ... REG(0xfe4):
+    case 0xfd0 ... 0xfe4:
         goto read_as_zero;
 
     case GICD_ICPIDR2:
@@ -314,27 +311,27 @@ static int vgic_distr_mmio_read(struct vcpu *v, mmio_info_t *info)
         return 0;
 
     /* Implementation defined -- read as zero */
-    case REG(0xfec) ... REG(0xffc):
+    case 0xfec ... 0xffc:
         goto read_as_zero;
 
     /* Reserved -- read as zero */
-    case REG(0x00c) ... REG(0x01c):
-    case REG(0x040) ... REG(0x07c):
-    case REG(0x7fc):
-    case REG(0xbfc):
-    case REG(0xf04) ... REG(0xf0c):
-    case REG(0xf30) ... REG(0xfcc):
+    case 0x00c ... 0x01c:
+    case 0x040 ... 0x07c:
+    case 0x7fc:
+    case 0xbfc:
+    case 0xf04 ... 0xf0c:
+    case 0xf30 ... 0xfcc:
         goto read_as_zero;
 
     default:
         printk("vGICD: unhandled read r%d offset %#08x\n",
-               dabt.reg, offset);
+               dabt.reg, gicd_reg);
         return 0;
     }
 
 bad_width:
     printk("vGICD: bad read width %d r%d offset %#08x\n",
-           dabt.size, dabt.reg, offset);
+           dabt.size, dabt.reg, gicd_reg);
     domain_crash_synchronous();
     return 0;
 
@@ -455,8 +452,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
     struct cpu_user_regs *regs = guest_cpu_user_regs();
     register_t *r = select_user_reg(regs, dabt.reg);
     struct vgic_irq_rank *rank;
-    int offset = (int)(info->gpa - v->domain->arch.vgic.dbase);
-    int gicd_reg = REG(offset);
+    int gicd_reg = (int)(info->gpa - v->domain->arch.vgic.dbase);
     uint32_t tr;
 
     switch ( gicd_reg )
@@ -473,7 +469,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
         goto write_ignore;
 
     /* Implementation defined -- write ignored */
-    case REG(0x020) ... REG(0x03c):
+    case 0x020 ... 0x03c:
         goto write_ignore;
 
     case GICD_IGROUPR ... GICD_IGROUPRN:
@@ -548,7 +544,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
                                           DABT_WORD)] = *r;
         else
             vgic_byte_write(&rank->itargets[REG_RANK_INDEX(8,
-                        gicd_reg - GICD_ITARGETSR, DABT_WORD)], *r, offset);
+                        gicd_reg - GICD_ITARGETSR, DABT_WORD)], *r, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -562,7 +558,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
                                            DABT_WORD)] = *r;
         else
             vgic_byte_write(&rank->ipriority[REG_RANK_INDEX(8,
-                       gicd_reg - GICD_IPRIORITYR, DABT_WORD)], *r, offset);
+                       gicd_reg - GICD_IPRIORITYR, DABT_WORD)], *r, gicd_reg);
         vgic_unlock_rank(v, rank);
         return 1;
 
@@ -602,7 +598,7 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
         return 0;
 
     /* Implementation defined -- write ignored */
-    case REG(0xfd0) ... REG(0xfe4):
+    case 0xfd0 ... 0xfe4:
         goto write_ignore;
 
     /* R/O -- write ignore */
@@ -610,27 +606,27 @@ static int vgic_distr_mmio_write(struct vcpu *v, mmio_info_t *info)
         goto write_ignore;
 
     /* Implementation defined -- write ignored */
-    case REG(0xfec) ... REG(0xffc):
+    case 0xfec ... 0xffc:
         goto write_ignore;
 
     /* Reserved -- write ignored */
-    case REG(0x00c) ... REG(0x01c):
-    case REG(0x040) ... REG(0x07c):
-    case REG(0x7fc):
-    case REG(0xbfc):
-    case REG(0xf04) ... REG(0xf0c):
-    case REG(0xf30) ... REG(0xfcc):
+    case 0x00c ... 0x01c:
+    case 0x040 ... 0x07c:
+    case 0x7fc:
+    case 0xbfc:
+    case 0xf04 ... 0xf0c:
+    case 0xf30 ... 0xfcc:
         goto write_ignore;
 
     default:
         printk("vGICD: unhandled write r%d=%"PRIregister" offset %#08x\n",
-               dabt.reg, *r, offset);
+               dabt.reg, *r, gicd_reg);
         return 0;
     }
 
 bad_width:
     printk("vGICD: bad write width %d r%d=%"PRIregister" offset %#08x\n",
-           dabt.size, dabt.reg, *r, offset);
+           dabt.size, dabt.reg, *r, gicd_reg);
     domain_crash_synchronous();
     return 0;
 
